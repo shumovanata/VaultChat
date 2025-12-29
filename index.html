@@ -1,158 +1,120 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Чат поддержки</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #fff; height: 100vh; overflow: hidden; }
-        .chat-container { height: 100vh; display: flex; flex-direction: column; background: #000; }
-        .header { background: linear-gradient(135deg, #0088cc 0%, #005f99 100%); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .header-title { font-size: 18px; font-weight: 600; color: white; }
-        .close-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: background 0.2s; }
-        .close-btn:hover { background: rgba(255,255,255,0.3); }
-        .messages-container { flex: 1; padding: 20px; overflow-y: auto; background: #111; }
-        .message { margin-bottom: 15px; display: flex; flex-direction: column; }
-        .message.me { align-items: flex-end; }     /* Твои сообщения — справа */
-        .message.partner { align-items: flex-start; } /* Сообщения партнёра — слева */
-        .message-bubble { max-width: 70%; padding: 10px 15px; border-radius: 18px; word-wrap: break-word; }
-        .message.me .message-bubble { background: #0088cc; border-bottom-right-radius: 4px; color: white; }
-        .message.partner .message-bubble { background: #333; border-bottom-left-radius: 4px; color: #fff; }
-        .message-time { font-size: 12px; color: #888; margin-top: 5px; text-align: right; }
-        .message.partner .message-time { text-align: left; }
-        .input-container { padding: 15px 20px; background: #000; border-top: 1px solid #333; display: flex; gap: 10px; }
-        .message-input { flex: 1; padding: 12px 16px; border: 1px solid #333; border-radius: 20px; background: #111; color: #fff; font-size: 16px; outline: none; }
-        .message-input::placeholder { color: #888; }
-        .send-btn { width: 44px; height: 44px; border: none; border-radius: 50%; background: #0088cc; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-        .send-btn:hover { background: #006699; }
-        .send-btn:disabled { background: #333; cursor: not-allowed; opacity: 0.5; }
-        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #888; text-align: center; }
-        .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VaultChat</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // ВСТАВЬТЕ СВОЙ КОНФИГ ИЗ FIREBASE СЮДА
+    const firebaseConfig = {
+      apiKey: "AIzaSyBNuq7jKfbA4T7psLhY_RCjH6FAcJUklWU",
+    authDomain: "safehaven-f3bbf.firebaseapp.com",
+    databaseURL: "https://safehaven-f3bbf-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "safehaven-f3bbf",
+    storageBucket: "safehaven-f3bbf.firebasestorage.app",
+    messagingSenderId: "1022694005000",
+    appId: "1:1022694005000:web:f0156edcd2ad3e524a34bd"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Уникальный ID чата — можно изменить на динамический (например, по ID партнёра)
+    // Для теста используем один общий чат "main". Позже можно делать приватные комнаты.
+    const chatRef = ref(db, 'chats/main/messages');
+
+    const webApp = window.Telegram.WebApp;
+    webApp.ready();
+    webApp.expand();
+
+    const user = webApp.initDataUnsafe.user;
+    const userId = user ? user.id : 'guest';
+    const userName = user ? (user.first_name || user.username) : 'Гость';
+
+    document.getElementById('user-name').textContent = userName;
+  </script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #121212; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+    header { background: #1e88e5; padding: 15px; text-align: center; font-size: 20px; }
+    #messages { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+    .message { max-width: 80%; padding: 10px 15px; border-radius: 18px; line-height: 1.4; }
+    .mine { align-self: flex-end; background: #1e88e5; }
+    .other { align-self: flex-start; background: #333; }
+    .sender { font-size: 12px; opacity: 0.7; margin-bottom: 5px; }
+    #input-area { display: flex; padding: 10px; background: #1f1f1f; }
+    #message-input { flex: 1; padding: 12px; border: none; border-radius: 25px; background: #333; color: #fff; font-size: 16px; }
+    #send-btn { margin-left: 10px; background: #1e88e5; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; cursor: pointer; }
+  </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="header">
-            <div class="header-title">💬 Чат поддержки</div>
-            <button class="close-btn" onclick="Telegram.WebApp.close()">×</button>
-        </div>
+  <header>
+    🔒 VaultChat — чат с партнёром<br>
+    <small>Вы: <span id="user-name">Загрузка...</span></small>
+  </header>
 
-        <div class="messages-container" id="messagesContainer">
-            <div class="empty-state">
-                <div class="empty-state-icon">💬</div>
-                <p>Начните переписку с партнёром</p>
-                <p style="font-size: 14px; margin-top: 8px;">Все сообщения только здесь</p>
-            </div>
-        </div>
+  <div id="messages"></div>
 
-        <div class="input-container">
-            <input type="text" class="message-input" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
-            <button class="send-btn" id="sendBtn" disabled>➤</button>
-        </div>
-    </div>
+  <div id="input-area">
+    <input type="text" id="message-input" placeholder="Введите сообщение..." autocomplete="off">
+    <button id="send-btn">➤</button>
+  </div>
 
-    <script>
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
+  <script type="module">
+    const messagesDiv = document.getElementById('messages');
+    const input = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
 
-        const messagesContainer = document.getElementById('messagesContainer');
-        const messageInput = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendBtn');
+    // Получаем сообщения в реальном времени
+    onValue(chatRef, (snapshot) => {
+      messagesDiv.innerHTML = '';
+      const data = snapshot.val();
+      if (data) {
+        Object.values(data).sort((a, b) => a.timestamp - b.timestamp).forEach(msg => {
+          addMessage(msg.text, msg.userId === userId, msg.userName, msg.timestamp);
+        });
+      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
 
-        let messages = [];
+    function addMessage(text, isMine, senderName, timestamp) {
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('message', isMine ? 'mine' : 'other');
 
-        // Загружаем историю из localStorage
-        function loadMessages() {
-            const saved = localStorage.getItem('private_chat_messages');
-            if (saved) {
-                messages = JSON.parse(saved);
-                renderMessages();
-            }
-        }
+      const senderSpan = document.createElement('div');
+      senderSpan.classList.add('sender');
+      senderSpan.textContent = isMine ? 'Вы' : senderName;
 
-        // Сохраняем историю
-        function saveMessages() {
-            localStorage.setItem('private_chat_messages', JSON.stringify(messages));
-        }
+      const textP = document.createElement('div');
+      textP.textContent = text;
 
-        // Отрисовка сообщений
-        function renderMessages() {
-            messagesContainer.innerHTML = '';
-            if (messages.length === 0) {
-                messagesContainer.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">💬</div>
-                        <p>Начните переписку с партнёром</p>
-                        <p style="font-size: 14px; margin-top: 8px;">Все сообщения только здесь</p>
-                    </div>`;
-                return;
-            }
+      msgDiv.appendChild(senderSpan);
+      msgDiv.appendChild(textP);
+      messagesDiv.appendChild(msgDiv);
+    }
 
-            messages.forEach(msg => {
-                const div = document.createElement('div');
-                div.className = `message ${msg.type}`;  // me или partner
-                const time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                div.innerHTML = `
-                    <div class="message-bubble">${msg.text}</div>
-                    <div class="message-time">${time}</div>
-                `;
-                messagesContainer.appendChild(div);
-            });
+    // Отправка сообщения
+    function sendMessage() {
+      const text = input.value.trim();
+      if (text) {
+        push(chatRef, {
+          text: text,
+          userId: userId,
+          userName: userName,
+          timestamp: serverTimestamp()
+        });
+        input.value = '';
+      }
+    }
 
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        // Отправка сообщения
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text) return;
-
-            // Добавляем своё сообщение локально
-            const myMessage = {
-                text: text,
-                type: 'me',
-                timestamp: new Date().toISOString()
-            };
-            messages.push(myMessage);
-            renderMessages();
-            saveMessages();
-
-            // Отправляем боту (чтобы он уведомил партнёра)
-            Telegram.WebApp.sendData(JSON.stringify({
-                action: 'send_message',
-                text: text
-            }));
-
-            messageInput.value = '';
-            toggleSendButton();
-        }
-
-        // Кнопка отправки и Enter
-        function handleEnter(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                sendMessage();
-            }
-        }
-
-        function toggleSendButton() {
-            sendBtn.disabled = messageInput.value.trim() === '';
-        }
-
-        // Инициализация
-        loadMessages();
-        messageInput.addEventListener('input', toggleSendButton);
-        messageInput.addEventListener('keypress', handleEnter);
-        sendBtn.addEventListener('click', sendMessage);
-
-        // Кнопка отправки внизу Telegram (опционально)
-        Telegram.WebApp.MainButton.setText('Отправить');
-        Telegram.WebApp.MainButton.show();
-        Telegram.WebApp.MainButton.onClick(sendMessage);
-
-        toggleSendButton();
-    </script>
+    sendBtn.addEventListener('click', sendMessage);
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
 </body>
 </html>
