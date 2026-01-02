@@ -7,17 +7,16 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onValue, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // === ВСТАВЬТЕ СВОЙ КОНФИГ FIREBASE СЮДА ===
     const firebaseConfig = {
       apiKey: "AIzaSyBNuq7jKfbA4T7psLhY_RCjH6FAcJUklWU",
-    authDomain: "safehaven-f3bbf.firebaseapp.com",
-    databaseURL: "https://safehaven-f3bbf-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "safehaven-f3bbf",
-    storageBucket: "safehaven-f3bbf.firebasestorage.app",
-    messagingSenderId: "1022694005000",
-    appId: "1:1022694005000:web:f0156edcd2ad3e524a34bd"
+      authDomain: "safehaven-f3bbf.firebaseapp.com",
+      databaseURL: "https://safehaven-f3bbf-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "safehaven-f3bbf",
+      storageBucket: "safehaven-f3bbf.firebasestorage.app",
+      messagingSenderId: "1022694005000",
+      appId: "1:1022694005000:web:f0156edcd2ad3e524a34bd"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -28,14 +27,12 @@
     webApp.expand();
 
     const user = webApp.initDataUnsafe.user;
-    const currentUserId = user ? user.id.toString() : 'guest';
-    const currentUserName = user ? (user.first_name + (user.last_name ? ' ' + user.last_name : '') || user.username) : 'Гость';
+    window.currentUserId = user ? user.id.toString() : 'guest';  // Делаем глобальной
+    window.currentUserName = user ? (user.first_name + (user.last_name ? ' ' + user.last_name : '') || user.username) : 'Гость';
 
     let partnerId = null;
     let chatRoomId = null;
     let chatRef = null;
-
-    document.getElementById('current-user').textContent = currentUserName;
   </script>
 
   <style>
@@ -51,14 +48,13 @@
     #input-area { display: flex; padding: 10px; background: #1f1f1f; gap: 10px; }
     input, button { padding: 12px; border: none; border-radius: 25px; font-size: 16px; }
     #partner-input { flex: 1; background: #333; color: #fff; }
-    #connect-btn, #send-btn { background: #1e88e5; color: white; cursor: pointer; width: 60px; }
+    #connect-btn, #send-btn { background: #1e88e5; color: white; cursor: pointer; }
     #send-btn { border-radius: 50%; width: 50px; height: 50px; font-size: 24px; }
     .status { text-align: center; padding: 20px; opacity: 0.7; }
   </style>
 </head>
 <body>
 
-  <!-- Экран ввода ID партнёра -->
   <div id="setup-screen">
     <header>
       🔒 VaultChat — приватный чат<br>
@@ -69,13 +65,12 @@
       <input type="number" id="partner-input" placeholder="Например: 123456789" inputmode="numeric">
       <button id="connect-btn">Подключиться</button>
       <p style="font-size:12px; margin-top:20px;">
-  Ваш ID: <b id="my-id">Загрузка...</b><br>
-  Поделитесь им с партнёром
-</p>
+        Ваш ID: <b id="my-id">Загрузка...</b><br>
+        Поделитесь им с партнёром
+      </p>
     </div>
   </div>
 
-  <!-- Основной экран чата -->
   <div id="chat-screen">
     <header>
       🔒 Приватный чат<br>
@@ -87,109 +82,91 @@
       <button id="send-btn">➤</button>
     </div>
   </div>
-<script>
- const myIdSpan = document.getElementById('my-id');
-  myIdSpan.textContent = currentUserId;
 
-  const setupScreen = document.getElementById('setup-screen');
-  const chatScreen = document.getElementById('chat-screen');
-  const messagesDiv = document.getElementById('messages');
-  const input = document.getElementById('message-input');
-  const partnerNameSpan = document.getElementById('partner-name');
+  <script>
+    // Ждём полной загрузки DOM
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('current-user').textContent = window.currentUserName;
+      document.getElementById('my-id').textContent = window.currentUserId;
 
-  function generateRoomId(id1, id2) {
-    const sorted = [id1, id2].sort();
-    return sorted[0] + '_' + sorted[1];
-  }
+      const setupScreen = document.getElementById('setup-screen');
+      const chatScreen = document.getElementById('chat-screen');
+      const messagesDiv = document.getElementById('messages');
+      const input = document.getElementById('message-input');
+      const partnerNameSpan = document.getElementById('partner-name');
 
-  document.getElementById('connect-btn').addEventListener('click', () => {
-  
-
-    const setupScreen = document.getElementById('setup-screen');
-    const chatScreen = document.getElementById('chat-screen');
-    const messagesDiv = document.getElementById('messages');
-    const input = document.getElementById('message-input');
-    const partnerNameSpan = document.getElementById('partner-name');
-
-    // Генерация уникального ID комнаты (всегда один и тот же для пары)
-    function generateRoomId(id1, id2) {
-      const sorted = [id1, id2].sort();
-      return sorted[0] + '_' + sorted[1];
-    }
-
-    // Подключение к чату
-    document.getElementById('connect-btn').addEventListener('click', () => {
-      const inputVal = document.getElementById('partner-input').value.trim();
-      if (!inputVal || inputVal === currentUserId) {
-        alert('Введите корректный ID партнёра (не свой)');
-        return;
+      function generateRoomId(id1, id2) {
+        const sorted = [id1, id2].sort();
+        return sorted[0] + '_' + sorted[1];
       }
 
-      partnerId = inputVal;
-      chatRoomId = generateRoomId(currentUserId, partnerId);
-      chatRef = ref(db, `chats/${chatRoomId}/messages`);
+      function addMessage(text, isMine, senderName) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message', isMine ? 'mine' : 'other');
 
-      // Переключаемся на чат
-      setupScreen.style.display = 'none';
-      chatScreen.style.display = 'flex';
+        const senderSpan = document.createElement('div');
+        senderSpan.classList.add('sender');
+        senderSpan.textContent = isMine ? 'Вы' : senderName;
 
-      // Слушаем сообщения
-      onValue(chatRef, (snapshot) => {
-        messagesDiv.innerHTML = '';
-        const data = snapshot.val();
-        if (data) {
-          Object.values(data)
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .forEach(msg => {
-              const isMine = msg.userId === currentUserId;
-              addMessage(msg.text, isMine, msg.userName || 'Аноним');
-            });
-        } else {
-          addMessage('Чат пуст. Начните переписку!', false, 'Система');
+        const textP = document.createElement('div');
+        textP.textContent = text;
+
+        msgDiv.appendChild(senderSpan);
+        msgDiv.appendChild(textP);
+        messagesDiv.appendChild(msgDiv);
+      }
+
+      document.getElementById('connect-btn').addEventListener('click', () => {
+        const inputVal = document.getElementById('partner-input').value.trim();
+        if (!inputVal || inputVal === window.currentUserId) {
+          alert('Введите корректный ID партнёра (не свой)');
+          return;
         }
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        partnerId = inputVal;
+        chatRoomId = generateRoomId(window.currentUserId, partnerId);
+        chatRef = ref(db, `chats/${chatRoomId}/messages`);
+
+        setupScreen.style.display = 'none';
+        chatScreen.style.display = 'flex';
+
+        onValue(chatRef, (snapshot) => {
+          messagesDiv.innerHTML = '';
+          const data = snapshot.val();
+          if (data) {
+            Object.values(data)
+              .sort((a, b) => a.timestamp - b.timestamp)
+              .forEach(msg => {
+                const isMine = msg.userId === window.currentUserId;
+                addMessage(msg.text, isMine, msg.userName || 'Аноним');
+              });
+          } else {
+            addMessage('Чат пуст. Начните переписку!', false, 'Система');
+          }
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        partnerNameSpan.textContent = 'ID ' + partnerId;
       });
 
-      // Проверяем, онлайн ли партнёр (опционально: можно хранить статус)
-      partnerNameSpan.textContent = 'ID ' + partnerId + ' (ожидание...)';
-    });
-
-    function addMessage(text, isMine, senderName) {
-      const msgDiv = document.createElement('div');
-      msgDiv.classList.add('message', isMine ? 'mine' : 'other');
-
-      const senderSpan = document.createElement('div');
-      senderSpan.classList.add('sender');
-      senderSpan.textContent = isMine ? 'Вы' : senderName;
-
-      const textP = document.createElement('div');
-      textP.textContent = text;
-
-      msgDiv.appendChild(senderSpan);
-      msgDiv.appendChild(textP);
-      messagesDiv.appendChild(msgDiv);
-    }
-
-    function sendMessage() {
-      const text = input.value.trim();
-      if (text && chatRef) {
-        push(chatRef, {
-          text: text,
-          userId: currentUserId,
-          userName: currentUserName,
-          timestamp: serverTimestamp()
-        });
-        input.value = '';
+      function sendMessage() {
+        const text = input.value.trim();
+        if (text && chatRef) {
+          push(chatRef, {
+            text: text,
+            userId: window.currentUserId,
+            userName: window.currentUserName,
+            timestamp: serverTimestamp()
+          });
+          input.value = '';
+        }
       }
-    }
 
-    document.getElementById('send-btn').addEventListener('click', sendMessage);
-    input.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
+      document.getElementById('send-btn').addEventListener('click', sendMessage);
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+      });
     });
   </script>
 </body>
 </html>
-
-
-
