@@ -20,19 +20,15 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    window.db = getDatabase(app);  // Делаем глобальной для второго скрипта
 
     const webApp = window.Telegram.WebApp;
     webApp.ready();
     webApp.expand();
 
     const user = webApp.initDataUnsafe.user;
-    window.currentUserId = user ? user.id.toString() : 'guest';  // Делаем глобальной
+    window.currentUserId = user ? user.id.toString() : 'guest';
     window.currentUserName = user ? (user.first_name + (user.last_name ? ' ' + user.last_name : '') || user.username) : 'Гость';
-
-    let partnerId = null;
-    let chatRoomId = null;
-    let chatRef = null;
   </script>
 
   <style>
@@ -84,7 +80,6 @@
   </div>
 
   <script>
-    // Ждём полной загрузки DOM
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('current-user').textContent = window.currentUserName;
       document.getElementById('my-id').textContent = window.currentUserId;
@@ -95,6 +90,8 @@
       const input = document.getElementById('message-input');
       const partnerNameSpan = document.getElementById('partner-name');
 
+      let chatRef = null;
+
       function generateRoomId(id1, id2) {
         const sorted = [id1, id2].sort();
         return sorted[0] + '_' + sorted[1];
@@ -103,14 +100,11 @@
       function addMessage(text, isMine, senderName) {
         const msgDiv = document.createElement('div');
         msgDiv.classList.add('message', isMine ? 'mine' : 'other');
-
         const senderSpan = document.createElement('div');
         senderSpan.classList.add('sender');
         senderSpan.textContent = isMine ? 'Вы' : senderName;
-
         const textP = document.createElement('div');
         textP.textContent = text;
-
         msgDiv.appendChild(senderSpan);
         msgDiv.appendChild(textP);
         messagesDiv.appendChild(msgDiv);
@@ -123,9 +117,9 @@
           return;
         }
 
-        partnerId = inputVal;
-        chatRoomId = generateRoomId(window.currentUserId, partnerId);
-        chatRef = ref(db, `chats/${chatRoomId}/messages`);
+        const partnerId = inputVal;
+        const chatRoomId = generateRoomId(window.currentUserId, partnerId);
+        chatRef = ref(window.db, `chats/${chatRoomId}/messages`);
 
         setupScreen.style.display = 'none';
         chatScreen.style.display = 'flex';
