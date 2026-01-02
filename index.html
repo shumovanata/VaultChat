@@ -20,7 +20,7 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    window.db = getDatabase(app);  // Делаем глобальной для второго скрипта
+    window.db = getDatabase(app);
 
     const webApp = window.Telegram.WebApp;
     webApp.ready();
@@ -29,6 +29,9 @@
     const user = webApp.initDataUnsafe.user;
     window.currentUserId = user ? user.id.toString() : 'guest';
     window.currentUserName = user ? (user.first_name + (user.last_name ? ' ' + user.last_name : '') || user.username) : 'Гость';
+
+    // Общая комната для всех, кто знает пароль
+    window.chatRef = ref(window.db, 'chats/shared_room/messages');
   </script>
 
   <style>
@@ -43,34 +46,35 @@
     .sender { font-size: 12px; opacity: 0.7; margin-bottom: 5px; }
     #input-area { display: flex; padding: 10px; background: #1f1f1f; gap: 10px; }
     input, button { padding: 12px; border: none; border-radius: 25px; font-size: 16px; }
-    #partner-input { flex: 1; background: #333; color: #fff; }
-    #connect-btn, #send-btn { background: #1e88e5; color: white; cursor: pointer; }
+    #password-input { flex: 1; background: #333; color: #fff; }
+    #enter-btn, #send-btn { background: #1e88e5; color: white; cursor: pointer; }
     #send-btn { border-radius: 50%; width: 50px; height: 50px; font-size: 24px; }
     .status { text-align: center; padding: 20px; opacity: 0.7; }
   </style>
 </head>
 <body>
 
+  <!-- Экран ввода пароля -->
   <div id="setup-screen">
     <header>
       🔒 VaultChat — приватный чат<br>
       <small>Вы: <span id="current-user">Загрузка...</span></small>
     </header>
     <div class="status">
-      <p>Введите Telegram ID вашего партнёра для начала приватного чата:</p>
-      <input type="number" id="partner-input" placeholder="Например: 123456789" inputmode="numeric">
-      <button id="connect-btn">Подключиться</button>
+      <p>Этот чат защищён паролем.<br>Введите пароль для входа:</p>
+      <input type="password" id="password-input" placeholder="Пароль" autocomplete="off">
+      <button id="enter-btn">Войти</button>
       <p style="font-size:12px; margin-top:20px;">
-        Ваш ID: <b id="my-id">Загрузка...</b><br>
-        Поделитесь им с партнёром
+        Подсказка: пароль состоит из цифр 😉
       </p>
     </div>
   </div>
 
+  <!-- Основной экран чата -->
   <div id="chat-screen">
     <header>
-      🔒 Приватный чат<br>
-      <small>С партнёром: <span id="partner-name">Подключение...</span></small>
+      🔒 VaultChat — общий чат<br>
+      <small>Участники: все, кто знает пароль</small>
     </header>
     <div id="messages"></div>
     <div id="input-area">
@@ -82,49 +86,30 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('current-user').textContent = window.currentUserName;
-      document.getElementById('my-id').textContent = window.currentUserId;
 
       const setupScreen = document.getElementById('setup-screen');
       const chatScreen = document.getElementById('chat-screen');
       const messagesDiv = document.getElementById('messages');
       const input = document.getElementById('message-input');
-      const partnerNameSpan = document.getElementById('partner-name');
 
-      let chatRef = null;
+      const CORRECT_PASSWORD = '14789';  // Здесь можно изменить пароль
 
-      function generateRoomId(id1, id2) {
-        const sorted = [id1, id2].sort();
-        return sorted[0] + '_' + sorted[1];
-      }
-
-      function addMessage(text, isMine, senderName) {
-        const msgDiv = document.createElement('div');
-        msgDiv.classList.add('message', isMine ? 'mine' : 'other');
-        const senderSpan = document.createElement('div');
-        senderSpan.classList.add('sender');
-        senderSpan.textContent = isMine ? 'Вы' : senderName;
-        const textP = document.createElement('div');
-        textP.textContent = text;
-        msgDiv.appendChild(senderSpan);
-        msgDiv.appendChild(textP);
-        messagesDiv.appendChild(msgDiv);
-      }
-
-      document.getElementById('connect-btn').addEventListener('click', () => {
-        const inputVal = document.getElementById('partner-input').value.trim();
-        if (!inputVal || inputVal === window.currentUserId) {
-          alert('Введите корректный ID партнёра (не свой)');
-          return;
+      // Проверка пароля и вход в чат
+      document.getElementById('enter-btn').addEventListener('click', () => {
+        const entered = document.getElementById('password-input').value.trim();
+        if (entered === CORRECT_PASSWORD) {
+          setupScreen.style.display = 'none';
+          chatScreen.style.display = 'flex';
+          loadMessages();
+        } else {
+          alert('Неверный пароль! Попробуйте ещё раз.');
+          document.getElementById('password-input').value = '';
         }
+      });
 
-        const partnerId = inputVal;
-        const chatRoomId = generateRoomId(window.currentUserId, partnerId);
-        chatRef = ref(window.db, `chats/${chatRoomId}/messages`);
-
-        setupScreen.style.display = 'none';
-        chatScreen.style.display = 'flex';
-
-        onValue(chatRef, (snapshot) => {
+      // Загрузка сообщений в реальном времени
+      function loadMessages() {
+        onValue(window.chatRef, (snapshot) => {
           messagesDiv.innerHTML = '';
           const data = snapshot.val();
           if (data) {
@@ -135,18 +120,33 @@
                 addMessage(msg.text, isMine, msg.userName || 'Аноним');
               });
           } else {
-            addMessage('Чат пуст. Начните переписку!', false, 'Система');
+            addMessage('Чат пуст. Начните общение!', false, 'Система');
           }
           messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
+      }
 
-        partnerNameSpan.textContent = 'ID ' + partnerId;
-      });
+      function addMessage(text, isMine, senderName) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message', isMine ? 'mine' : 'other');
 
+        const senderSpan = document.createElement('div');
+        senderSpan.classList.add('sender');
+        senderSpan.textContent = isMine ? 'Вы' : senderName;
+
+        const textP = document.createElement('div');
+        textP.textContent = text;
+
+        msgDiv.appendChild(senderSpan);
+        msgDiv.appendChild(textP);
+        messagesDiv.appendChild(msgDiv);
+      }
+
+      // Отправка сообщения
       function sendMessage() {
         const text = input.value.trim();
-        if (text && chatRef) {
-          push(chatRef, {
+        if (text) {
+          push(window.chatRef, {
             text: text,
             userId: window.currentUserId,
             userName: window.currentUserName,
@@ -159,6 +159,13 @@
       document.getElementById('send-btn').addEventListener('click', sendMessage);
       input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
+      });
+
+      // Позволяем войти по Enter в поле пароля
+      document.getElementById('password-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          document.getElementById('enter-btn').click();
+        }
       });
     });
   </script>
